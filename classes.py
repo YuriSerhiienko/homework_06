@@ -1,25 +1,9 @@
-import re
-import datetime
+from datetime import datetime
 from collections import UserDict
 
 class Field:
-    def __init__(self, value):
-        self._value = value
-
-    @property
-    def value(self):
-        return self._value
-
-    @value.setter
-    def value(self, new_value):
-        self._value = new_value
-
-    def __str__(self):
-        return str(self.value)
-
-class Name(Field):
-    def __init__(self, value):
-        super().__init__(value)
+    def __init__(self, value) -> None:
+        self.value = value
 
     @property
     def value(self):
@@ -27,112 +11,180 @@ class Name(Field):
 
     @value.setter
     def value(self, value):
-        validated_name = self.validate_name(value)
-        self._value = validated_name
+        self._value = value
 
-    def validate_name(self, name):
-        if not isinstance(name, str):
+
+class Name(Field):
+    def __init__(self, name: str):
+        self.value = name
+
+    @Field.value.setter
+    def value(self, name):
+        if not name.isalpha():
             raise ValueError
-        return name
+        Field.value.fset(self, name)
 
-    def __str__(self):
-        return str(self.value)
+    def __repr__(self) -> str:
+        return f"Name({self.value})"
+
 
 class Phone(Field):
-    def __init__(self, value):
-        self._value = None
-        self.set_value(value)
+    def __init__(self, value) -> None:
+        super().__init__(value)
 
-    @property
-    def value(self):
-        return self._value
+    def is_valid_phone(self):
+        return len(self.value) == 10 and self.value.isdigit()
+    
+    def __repr__(self) -> str:
+        return f"Phone({self.value})"
 
-    @value.setter
-    def value(self, new_value):
-        self.set_value(new_value)
 
-    def set_value(self, value):
-        if self.is_valid_phone(value):
-            self._value = value
-        else:
-            raise ValueError("Invalid phone number")
+class Email(Field):
+    def __init__(self, value) -> None:
+        super().__init__(value)
 
-    def is_valid_phone(self, value):
-        pattern = r'^0[0-9]{9}$'
-        return bool(re.match(pattern, value))
+    def __repr__(self) -> str:
+        return f"Email({self.value})"
 
-class Email:
-    pass
 
 class Birthday(Field):
-    def __init__(self, value):
-        self._value = datetime.datetime.strptime(value, "%d.%m.%Y").date()
+    def __init__(self, birthday):
+        self.value = birthday
 
-    @property
-    def value(self):
-        return self._value
+    @Field.value.setter
+    def value(self, birthday):
+        try:
+            dt = datetime.strptime(birthday, '%d.%m.%Y')
+        except (ValueError, TypeError):
+            raise ValueError
+        Field.value.fset(self, dt.date())
 
-    @value.setter
-    def value(self, new_value):
-        self._value = datetime.datetime.strptime(new_value, "%d.%m.%Y").date()
+    def __repr__(self) -> str:
+        return f"Birthday({self.value})"
 
-    def __str__(self):
-        return self.value.strftime("%d.%m.%Y")
 
 class Record:
-    def __init__(self, name, phone=None, birthday=None, email=None):
-        self.name = Name(name)
+    def __init__(
+        self,
+        name: Name,
+        phone: Phone | str | None = None,
+        email: Email | str | None = None,
+        birthday: Birthday | None = None
+    ):
+        self.name = name
+        self.birthday = birthday
+
         self.phones = []
-        self.birthday = None
-        self.email = None
-        if phone:
+        if phone is not None:
             self.add_phone(phone)
-        if birthday:
-            self.add_birthday(birthday)
-        if email:
+
+        self.emails = []
+        if email is not None:
             self.add_email(email)
 
-    def add_email(self, email):
-        self.email = email
+    def add_phone(self, phone: Phone | str):
+        if isinstance(phone, str):
+            phone = self.create_phone(phone)
+        self.phones.append(phone)
 
-    def add_birthday(self, birthday):
-        if self.birthday:
-            self.birthday.value = birthday
+    def add_email(self, email: Email | str):
+        if isinstance(email, str):
+            email = self.create_email(email)
+        self.emails.append(email)
+
+    def add_birthday(self, birthday: Birthday | str):
+        if isinstance(birthday, str):
+            birthday = self.create_birthday(birthday)
+        self.birthday = birthday
+
+    def create_phone(self, phone: str):
+        return Phone(phone)
+
+    def create_email(self, email: str):
+        return Email(email)
+
+    def create_birthday(self, birthday: str):
+        return Birthday(birthday)
+
+    def edit_phone(self, old_phone, new_phone):
+        for p in self.phones:
+            if p.value == old_phone:
+                p.value = new_phone
+                return p
+
+    def edit_email(self, old_email, new_email):
+        for e in self.emails:
+            if e.value == old_email:
+                e.value = new_email
+                return e
+
+    def show(self):
+        for inx, p in enumerate(self.phones):
+            print(f'{inx}: {p.value}') 
+
+    def get_phone(self, inx):
+        if self.phones:
+            return self.phones[inx]
         else:
-            self.birthday = Birthday(birthday)
+            return None
+
+    def get_name(self):
+        return self.name.value
+
+    def get_email(self, indx):
+        if self.emails and indx < len(self.emails):
+            return self.emails[indx]
+        else:
+            return None
+
+    def get_birthday(self):
+        return self.birthday
 
     def days_to_birthday(self):
         if self.birthday:
-            today = datetime.date.today()
-            next_birthday = datetime.date(today.year, self.birthday.value.month, self.birthday.value.day)
+            today = datetime.today().date()
+            next_birthday = datetime(today.year, self.birthday.value.month, self.birthday.value.day).date()
             if today > next_birthday:
-                next_birthday = datetime.date(today.year + 1, self.birthday.value.month, self.birthday.value.day)
+                next_birthday = datetime(today.year + 1, self.birthday.value.month, self.birthday.value.day).date()
             days_left = (next_birthday - today).days
             return days_left
         else:
             return "No birthday set"
 
-    def add_phone(self, phone):
-        if isinstance(phone, str):
-            phone = Phone(phone)
-        if phone not in self.phones:
-            self.phones.append(phone)
+    def __str__(self) -> str:
+        return f"name: {self.name}: phones: {self.phones} emails: {self.emails} birthday: {self.birthday}"
 
-    def edit_phone(self, index, phone):
-        self.phones[index].value = phone
+    def __repr__(self) -> str:
+        return f"Record({self.name!r}: {self.phones!r}, {self.emails!r}, {self.birthday!r})"
 
-    def delete_phone(self, index):
-        del self.phones[index]
 
 class AddressBook(UserDict):
-    def add_record(self, record):
-        self.data[record.name.value] = record
+    def __init__(self, record: Record | None = None) -> None:
+        self.data = {}
+        if record is not None:
+            self.add_record(record)
 
-    def search(self, name=None, phone=None, email=None):
-        results = []
-        for contact in self.data.values():
-            if (name and name.lower() in contact.name.value.lower()) or \
-               (phone and phone in [phone.value for phone in contact.phones]) or \
-               (email and contact.email and email.lower() in contact.email.lower()):
-                results.append(contact)
-        return results
+    def add_record(self, record: Record):
+        self.data[record.get_name()] = record
+
+    def show(self):
+        for name, record in self.data.items():
+            print(f'{name}:')
+            record.show()
+
+    def get_records(self, name: str) -> Record:
+        try:
+            return self.data[name]
+        except KeyError:
+            return None
+
+    def __iter__(self):
+        return iter(self.data.values())
+
+    def __next__(self):
+        if self._iter_index < len(self.data):
+            record = list(self.data.values())[self._iter_index]
+            self._iter_index += 1
+            return record
+        else:
+            raise StopIteration
