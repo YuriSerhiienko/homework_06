@@ -1,4 +1,4 @@
-from classes import Record, AddressBook
+from classes import Record, AddressBook, Name, Email, Birthday, Phone
 
 phonebook = AddressBook()
 
@@ -10,137 +10,185 @@ def input_error(func):
         except KeyError:
             return "There is no such name"
         except ValueError:
-            return "Give me name, phone, email or birthday please"
+            return "Give me name and phone/email/birthday please"
         except IndexError:
             return "Enter user name"
         except TypeError:
             return "Incorrect values"
     return inner
 
+
 @input_error
 def greeting():
     return "How can I help you?"
 
+
 def unknown_command():
     return "Unknown command"
+
 
 @input_error
 def exit():
     return None
 
+
 @input_error
-def add_user(name, contact_details=None):
-    record = phonebook.get(name, None)
+def add_user(name, contact_details):
+    record = phonebook.get_records(name)
     if record:
-        if contact_details:
-            if '@' in contact_details:
-                record.add_email(contact_details)
-            elif '.' in contact_details:
-                record.add_birthday(contact_details)
-            else:
-                record.add_phone(contact_details)
-            return "Contact successfully updated"
-        else:
-            return "Contact already exists"
+        return update_user(record, contact_details)
     else:
-        if contact_details:
-            if '@' in contact_details:
-                record = Record(name, email=contact_details)
-            elif '.' in contact_details:
-                record = Record(name, birthday=contact_details)
-            else:
-                record = Record(name, phone=contact_details)
+        if '@' in contact_details:
+            record = Record(Name(name), email=Email(contact_details))
+        elif '.' in contact_details:
+            record = Record(Name(name), birthday=Birthday(contact_details))
         else:
-            return "Give me name and phone please"
-
+            phone = Phone(contact_details)
+            if phone.is_valid_phone():
+                record = Record(Name(name), phone=phone)
+                phonebook.add_record(record)
+                return "Contact successfully added"
+            else:
+                return "Invalid phone number format"
         phonebook.add_record(record)
-        return "Contact added successfully"
+        return "Contact successfully added"
+        
+
+def update_user(record, contact_details):
+    if '@' in contact_details:
+        record.add_email(Email(contact_details))
+    elif '.' in contact_details:
+        record.add_birthday(Birthday(contact_details))
+    else:
+        phone = Phone(contact_details)
+        if phone.is_valid_phone():
+            record.add_phone(phone)
+        else:
+            return "Invalid phone number format"
+    return "Contact details added successfully"  
+
 
 @input_error
-def change_phone(name, phone):
-    record = phonebook.get(name, None)
+def change_phone(name, new_phone, index=0):
+    record = phonebook.get_records(name)
     if record:
-        record.edit_phone(index=0, phone=phone)
-        return "Phone number updated successfully"
+        if record.phones and '0' <= str(index) < str(len(record.phones)):
+            record.edit_phone(old_phone=record.phones[int(index)].value, new_phone=new_phone)
+            return "Phone number updated successfully"
+        else:
+            return "Invalid phone number index"
     else:
         return "There is no such name"
 
+
+@input_error
 def show_all():
-    if not phonebook:
+    if not phonebook.data:
         return "The phonebook is empty"
     result = ''
-    for record in phonebook.values():
-        result += record.name.value
+    for name, record in phonebook.data.items():
+        result += f'{name}:'
         if record.phones:
             phones = ', '.join([phone.value for phone in record.phones])
-            result += f": {phones}"
-        if record.email:
-            result += f", Email: {record.email}"
+            result += f' phones: {phones}'
+        if record.emails:
+            emails = ', '.join([email.value for email in record.emails])
+            result += f' emails: {emails}'
         if record.birthday:
-            result += f", Birthday: {str(record.birthday)}"
+            result += f' birthday: {record.birthday.value}'
             days_left = record.days_to_birthday()
-            result += f", Days to birthday: {days_left}"
+            result += f' days to birthday: {days_left}'
         result += '\n'
     return result.rstrip()
 
+
 @input_error
 def get_birthday(name):
-    result = phonebook.search(name=name)
-    if result:
-        result_strings = [f"{contact.name.value}: {contact.birthday}, Days to birthday: {contact.days_to_birthday()}" for contact in result if contact.birthday]
-        if result_strings:
-            return ", ".join(result_strings)
+    record = phonebook.get_records(name)
+    if record:
+        if record.birthday:
+            return f"{record.name.value}: {record.birthday.value}, Days to birthday: {record.days_to_birthday()}"
         else:
             return "No birthday found for that name"
     else:
         return "There is no such name"
 
-@input_error
+
 def get_phone_number(name):
-    result = phonebook.search(name=name)
-    if result:
-        result_strings = []
-        for contact in result:
-            if contact.phones:
-                phone_numbers = ', '.join([phone.value for phone in contact.phones])
-                result_strings.append(f"{contact.name.value}: {phone_numbers}")
-            else:
-                result_strings.append(f"{contact.name.value}: No phone number")
-        return ", ".join(result_strings)
+    record = phonebook.get_records(name)
+    if record:
+        phones = [f"{record.get_name()}: {phone}" for phone in record.phones]
+        result = "\n".join(phones)
+        return result
     else:
         return "There is no such name"
+
 
 @input_error
 def get_email(name):
-    result = phonebook.search(name=name)
-    if result:
-        result_strings = [f"{contact.name.value}: {contact.email}" for contact in result if contact.email]
-        if result_strings:
-            return ", ".join(result_strings)
-        else:
-            return "No email found for that name"
+    record = phonebook.get_records(name)
+    if record:
+        result = f"{record.get_name()}: {record.get_email(0)}"
+        return result
     else:
         return "There is no such name"
 
+
+@input_error
 def search_by_criteria(criteria):
     if criteria:
-        result = phonebook.search(name=criteria) or phonebook.search(email=criteria) or phonebook.search(phone=criteria)
+        result = []
+        for record in phonebook.data.values():
+            if criteria in record.get_name():
+                result.append(record)
+            elif record.get_email(0) and criteria in record.get_email(0).value:
+                result.append(record)
+            elif any(criteria in phone.value for phone in record.phones):
+                result.append(record)
+            
         if result:
             result_strings = []
-            for contact in result:
-                contact_info = f"{contact.name.value}"
-                if contact.phones:
-                    phones = ', '.join([phone.value for phone in contact.phones])
+            for record in result:
+                contact_info = f"{record.get_name()}"
+                if record.phones:
+                    phones = ", ".join([phone.value for phone in record.phones])
                     contact_info += f": {phones}"
-                if contact.email:
-                    contact_info += f", Email: {contact.email}"
-                if contact.birthday:
-                    contact_info += f", Birthday: {str(contact.birthday)}"
-                    days_left = contact.days_to_birthday()
+                if record.get_email(0):
+                    contact_info += f", Email: {record.get_email(0).value}"
+                if record.get_birthday():
+                    contact_info += f", Birthday: {str(record.get_birthday().value)}"
+                    days_left = record.days_to_birthday()
                     contact_info += f", Days to birthday: {days_left}"
                 result_strings.append(contact_info)
             return "\n".join(result_strings)
+
     return "No records found for that criteria"
+
+
+@input_error
+def iteration(page=1, page_size=3):
+    if not phonebook.data:
+        return "The phonebook is empty"
+
+    page = int(page)
+    page_size = int(page_size)
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+
+    records = list(phonebook)
+    total_pages = (len(records) + page_size - 1) // page_size
+
+    if page < 1 or page > total_pages:
+        return f"Invalid page number. Please enter a page number between 1 and {total_pages}"
+
+    result = ""
+    for record in records[start_index:end_index]:
+        result += f"{record}\n"
+
+    result += f"Page {page}/{total_pages}"
+
+    return result.rstrip()
+
 
 commands = {
     'hello': greeting,
@@ -154,18 +202,19 @@ commands = {
     "email": get_email,
     "birthday": get_birthday,
     'search': search_by_criteria,
+    "page": iteration,
 }
+
 
 def main():
     while True:
-        command, *args = input(">>> ").strip().split(' ', 1)
+        command, *args = input(">>> ").strip().lower().split(' ')
         if commands.get(command):
             handler = commands.get(command)
             if args:
-                args = args[0].split()
                 result = handler(*args)
             else:
-                result = handler(*args)
+                result = handler()
         elif args and commands.get(command + ' ' + args[0]):
             command = command + ' ' + args[0]
             args = args[1:]
@@ -173,12 +222,11 @@ def main():
             result = handler(*args)
         else:
             result = unknown_command()
-
         if not result:
-            print('Good bye!')
+            print('Goodbye!')
             break
-
         print(result)
+
 
 if __name__ == "__main__":
     main()
